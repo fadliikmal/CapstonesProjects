@@ -1,0 +1,16 @@
+# Python Environment & Cache
+venv/
+__pycache__/
+*.pyc
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+
+# Large Model Weights & Data (Opsional jika ingin diabaikan di Git)
+# models/*.pt
+# models/*.onnx
+
+# Output & Temporary Files
+output/*.mp4
+*.log
