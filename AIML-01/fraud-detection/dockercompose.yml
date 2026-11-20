@@ -1,0 +1,29 @@
+services:
+  fraud-api:
+    build: .
+    container_name: fraud-detection-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./reports:/app/reports
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  fraud-dashboard:
+    build: .
+    container_name: fraud-analyst-dashboard
+    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://fraud-api:8000
+    volumes:
+      - ./reports:/app/reports
+    depends_on:
+      fraud-api:
+        condition: service_healthy
