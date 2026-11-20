@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-11-19T22:38:05.989552",
+  "reference_samples": 5000,
+  "current_samples": 5000,
+  "monitored_columns": 19,
+  "drifted_columns_count": 8,
+  "drift_share": 0.4211,
+  "prediction_psi": 0.0188,
+  "thresholds": {
+    "max_drift_share": 0.3,
+    "max_prediction_psi": 0.2
+  },
+  "retrain_triggered": true,
+  "pipeline_action": "TRIGGER_RETRAIN_WEBHOOK"
+}
