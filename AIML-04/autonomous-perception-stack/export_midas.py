@@ -1,50 +1,49 @@
+# Install dependencies if running on a fresh Google Colab runtime
+# !pip install -q timm onnx onnxruntime
+
 import os
+import shutil
 import torch
-import onnxruntime as ort
+import onnx
 
-# Patch nn.Unflatten so dynamic Tensor dimensions from MiDaS ViT backbone
-# are converted to Python ints during ONNX export
-_orig_unflatten_init = torch.nn.Unflatten.__init__
+# 1. Load pre-trained MiDaS_small from PyTorch Hub
+model_type = "MiDaS_small"
+print(f"[INFO] Loading {model_type} from PyTorch Hub...")
+midas = torch.hub.load("intel-isl/MiDaS", model_type, pretrained=True)
+midas.eval()
 
+# Export on CPU for maximum ONNX graph compatibility
+device = torch.device("cpu")
+midas.to(device)
 
-def _patched_unflatten_init(self, dim, unflattened_size):
-    if isinstance(unflattened_size, (tuple, list)):
-        unflattened_size = tuple(
-            int(s.item()) if isinstance(s, torch.Tensor) else int(s)
-            for s in unflattened_size
-        )
-    _orig_unflatten_init(self, dim, unflattened_size)
+# 2. Create dummy input matching MiDaS_small native resolution (1, 3, 256, 256)
+dummy_input = torch.randn(1, 3, 256, 256, device=device)
 
+# 3. Export PyTorch model to ONNX format
+os.makedirs("models", exist_ok=True)
+onnx_output_path = "models/midas_small.onnx"
 
-torch.nn.Unflatten.__init__ = _patched_unflatten_init
+print(f"[INFO] Exporting {model_type} to {onnx_output_path}...")
+torch.onnx.export(
+    midas,
+    dummy_input,
+    onnx_output_path,
+    export_params=True,
+    opset_version=13,
+    do_constant_folding=True,
+    input_names=["input"],
+    output_names=["depth"],
+)
 
+# 4. Validate the exported ONNX graph
+onnx_model = onnx.load(onnx_output_path)
+onnx.checker.check_model(onnx_model)
+print(f"[SUCCESS] ONNX model verified and saved at: {onnx_output_path}")
 
-def export_dpt_hybrid_to_onnx(output_path: str = "models/midas_dpt_hybrid.onnx"):
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    print("[INFO] Loading pre-trained MiDaS DPT_Hybrid weights...")
-    midas = torch.hub.load("intel-isl/MiDaS", "DPT_Hybrid", pretrained=True)
-    midas.eval()
-
-    dummy_input = torch.randn(1, 3, 384, 384, dtype=torch.float32)
-
-    print(f"[INFO] Exporting DPT_Hybrid to ONNX at '{output_path}'...")
-    export_kwargs = dict(
-        export_params=True,
-        opset_version=14,
-        do_constant_folding=True,
-        input_names=["input"],
-        output_names=["depth"],
-    )
-    try:
-        torch.onnx.export(midas, dummy_input, output_path, dynamo=False, **export_kwargs)
-    except TypeError:
-        torch.onnx.export(midas, dummy_input, output_path, **export_kwargs)
-
-    # Verify exported ONNX model with ONNX Runtime CPU
-    sess = ort.InferenceSession(output_path, providers=["CPUExecutionProvider"])
-    out = sess.run(["depth"], {"input": dummy_input.numpy()})[0]
-    print(f"[SUCCESS] Verified '{output_path}' | Output shape: {out.shape}")
-
-
-if __name__ == "__main__":
-    export_dpt_hybrid_to_onnx()
+# 5. Optional: Auto-backup to Google Drive if executed inside Google Colab
+drive_export_dir = "/content/drive/MyDrive/Autonomous_Perception_Models/kitti_perception/exported_models"
+if os.path.exists("/content/drive/MyDrive"):
+    os.makedirs(drive_export_dir, exist_ok=True)
+    drive_dst = os.path.join(drive_export_dir, "midas_small.onnx")
+    shutil.copy(onnx_output_path, drive_dst)
+    print(f"[SUCCESS] Backup copied to Google Drive: {drive_dst}")
